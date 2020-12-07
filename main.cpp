@@ -8,6 +8,8 @@
 using namespace cv;
 
 #define RGB 1
+#define CONVERT_DEPTH_TO_16_BIT 0
+
 
 uint16_t*
 convertTo16Bit(float* in, unsigned w, unsigned h){
@@ -16,6 +18,19 @@ convertTo16Bit(float* in, unsigned w, unsigned h){
   for(unsigned idx = 0; idx != w*h; ++idx){
     const float v = norm * in[idx];
     out[idx] = (uint16_t) (65536.0 * v);
+  }
+  return out;
+}
+
+
+// converts back from float metres to uint16_t millimetres
+uint16_t*
+convertTo16BitMM(float* in, unsigned w, unsigned h){
+  static uint16_t* out = new uint16_t [w*h];
+
+  for(unsigned idx = 0; idx != w*h; ++idx){
+    const float mms = 1000.f * in[idx];
+    out[idx] = uint16_t(mms);
   }
   return out;
 }
@@ -30,6 +45,15 @@ char* get_cmd_option(char** begin, char** end, const std::string & option) {
 bool cmd_option_exists(char** begin, char** end, const std::string& option) {
     return std::find(begin, end, option) != end;
 }
+
+
+bool should_export_image(const uint32_t frame){
+    // return (frame > 42 && frame < 82 && (frame%5) == 4 );
+    return (frame == 45 );
+}
+
+
+
 
 
 int main(int argc, char** argv )
@@ -116,11 +140,21 @@ int main(int argc, char** argv )
 
             for (int n = 0; n < NUM_CAMS; ++n){
                 file.read(reinterpret_cast<char*> ( dimg_buffer.data() ), dimg_size_bytes);
-                Mat dimage_out (dimg_height, dimg_width, CV_16UC1, convertTo16Bit(dimg_buffer.data(), dimg_width, dimg_height ));
 
-                if (i == 45 || i == 50 || i == 55 || i == 80)
+                if ( should_export_image(i) )
                 {
-                    imwrite(outpath_base + "d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", dimage_out);
+                    if (CONVERT_DEPTH_TO_16_BIT){
+                        Mat dimage_out (dimg_height, dimg_width, CV_16UC1, convertTo16BitMM(dimg_buffer.data(), dimg_width, dimg_height ));
+                        imwrite(outpath_base + "d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", dimage_out);
+                    }
+                    else {
+                        const std::string depth_outpath = outpath_base + "d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".depth";
+                        
+                        std::ofstream outfile (depth_outpath, std::ios::binary);
+                        outfile.write(reinterpret_cast<char*>( dimg_buffer.data() ) , dimg_size_bytes);
+                        outfile.close();
+
+                    }
                 }
             }
 
@@ -158,7 +192,9 @@ int main(int argc, char** argv )
 
                 }
 
-                if (i == 45 || i == 50 || i == 55 || i == 80)
+
+                if ( should_export_image(i)  )
+                // if (i == 45 || i == 50 || i == 55 || i == 80)
                 {
                     std::cout << "--> Writing frame " << i << std::endl;
                     if (!imwrite(outpath_base + "t_" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", image_out)){
