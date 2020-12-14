@@ -39,7 +39,7 @@ int main(int argc, char** argv )
     if (
         cmd_option_exists(argv, argv+argc, "-h") 
         || !cmd_option_exists(argv, argv+argc, "-i") 
-        || !cmd_option_exists(argv, argv+argc, "-n") 
+        // || !cmd_option_exists(argv, argv+argc, "-n") 
         || argc < 2
           )
     {
@@ -51,6 +51,7 @@ int main(int argc, char** argv )
                   << "\t -p: create pngs" << std::endl
                   << "\t -m: create masked jpegs to test size" << std::endl
                   << "\t -n: number of time steps (=1)" << std::endl
+                  << "\t -t: target frame - just export one step" << std::endl
                   ;
         return -1;
     }
@@ -60,7 +61,32 @@ int main(int argc, char** argv )
     const bool        IN_JPGS  = cmd_option_exists(argv, argv+argc, "-j"); 
     const bool        PNGS     = cmd_option_exists(argv, argv+argc, "-p"); 
     const bool        MASKS    = cmd_option_exists(argv, argv+argc, "-m"); 
-    const uint32_t    num_imgs = atoi( get_cmd_option(argv, argv+argc, "-n") ); 
+
+
+    uint32_t    num_imgs = 0;
+    if (cmd_option_exists(argv,argv+argc,"-n")){
+        num_imgs = atoi( get_cmd_option(argv, argv+argc, "-n") ); 
+    }
+    
+    uint32_t target_frame = 0;
+    const bool TARGET_FRAME_ONLY = cmd_option_exists(argv, argv+argc, "-t"); 
+    if (TARGET_FRAME_ONLY){
+        target_frame = atoi( get_cmd_option(argv, argv+argc, "-t") ); 
+    }
+
+    std::string depth_output_dir = "../images/kinect_textures/";
+    std::string colour_output_dir = "../images/kinect_textures/";
+
+    if (cmd_option_exists(argv, argv+argc, "-do")) {
+        depth_output_dir = get_cmd_option(argv,argv+argc,"-do");
+    }
+
+    if (cmd_option_exists(argv, argv+argc, "-co")) {
+        colour_output_dir = get_cmd_option(argv,argv+argc,"-co");
+    }
+
+
+    num_imgs = std::max(num_imgs, target_frame+1);
 
     uint32_t const img_width  = QHD? 2560 : 1280;
     uint32_t const img_height = QHD? 1440 : 720;
@@ -108,7 +134,26 @@ int main(int argc, char** argv )
             for (int n = 0; n < 4; ++n){
                 file.read(reinterpret_cast<char*> ( dimg_buffer.data() ), dimg_size_bytes);
                 Mat dimage_out (dimg_height, dimg_width, CV_16UC1, convertTo16Bit(dimg_buffer.data(), dimg_width, dimg_height ));
-                imwrite("../images/kinect_textures/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", dimage_out);
+
+                if ( (TARGET_FRAME_ONLY && i == target_frame) || !TARGET_FRAME_ONLY) {
+
+                    // write depth images as PNG
+                    // imwrite("../images/kinect_textures/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", dimage_out);
+
+                    // write depth images as pure floats
+                    const std::string path = depth_output_dir + "/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".depth";
+                    std::ofstream ofile (path, std::ios::binary);
+                    ofile.write(reinterpret_cast<char*> (dimg_buffer.data()), sizeof(float) * dimg_width * dimg_height);
+                    ofile.close();
+                    
+                    if (!ofile.good()){
+                        std::cout << "Error creating file " << path << std::endl;
+                        throw std::exception();
+                    }
+
+
+                } 
+
             }
 
 
@@ -145,9 +190,11 @@ int main(int argc, char** argv )
 
                 }
 
-                if (!imwrite("../images/kinect_textures/out_t_" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", image_out)){
-                    std::cout << "Couldn't save image" << std::endl;
-                }
+                if ( (TARGET_FRAME_ONLY && i == target_frame) || !TARGET_FRAME_ONLY) {
+                    if (!imwrite(colour_output_dir + "/out_t_" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", image_out)){
+                        std::cout << "Couldn't save image" << std::endl;
+                    }
+                } 
 
             }
 
