@@ -8,6 +8,8 @@
 using namespace cv;
 
 #define RGB 1
+#define CONVERT_DEPTH_TO_16_BIT 0
+
 
 uint16_t*
 convertTo16Bit(float* in, unsigned w, unsigned h){
@@ -16,6 +18,19 @@ convertTo16Bit(float* in, unsigned w, unsigned h){
   for(unsigned idx = 0; idx != w*h; ++idx){
     const float v = norm * in[idx];
     out[idx] = (uint16_t) (65536.0 * v);
+  }
+  return out;
+}
+
+
+// converts back from float metres to uint16_t millimetres
+uint16_t*
+convertTo16BitMM(float* in, unsigned w, unsigned h){
+  static uint16_t* out = new uint16_t [w*h];
+
+  for(unsigned idx = 0; idx != w*h; ++idx){
+    const float mms = 1000.f * in[idx];
+    out[idx] = uint16_t(mms);
   }
   return out;
 }
@@ -32,6 +47,15 @@ bool cmd_option_exists(char** begin, char** end, const std::string& option) {
 }
 
 
+bool should_export_image(const uint32_t frame){
+    // return (frame > 42 && frame < 82 && (frame%5) == 4 );
+    return (frame == 45 );
+}
+
+
+
+
+
 int main(int argc, char** argv )
 {
 
@@ -46,6 +70,7 @@ int main(int argc, char** argv )
         // printf("usage: parse_image <Stream_Path>\n");
         std::cout << "Read kinect streams and output images\n\n"
                   << "\t -i: input file path" << std::endl
+                  << "\t -i: out file path base" << std::endl
                   << "\t -qhd: colour texture resolution is 2560x1440. If not provided, HD 1280x720 is assumed" << std::endl
                   << "\t -j: input images are jpegs" << std::endl
                   << "\t -p: create pngs" << std::endl
@@ -63,9 +88,9 @@ int main(int argc, char** argv )
     const bool        MASKS    = cmd_option_exists(argv, argv+argc, "-m"); 
 
 
-    uint32_t    num_imgs = 0;
+    uint32_t    num_frames = 0;
     if (cmd_option_exists(argv,argv+argc,"-n")){
-        num_imgs = atoi( get_cmd_option(argv, argv+argc, "-n") ); 
+        num_frames = atoi( get_cmd_option(argv, argv+argc, "-n") ); 
     }
     
     uint32_t target_frame = 0;
@@ -73,6 +98,7 @@ int main(int argc, char** argv )
     if (TARGET_FRAME_ONLY){
         target_frame = atoi( get_cmd_option(argv, argv+argc, "-t") ); 
     }
+    num_frames = std::max(num_frames, target_frame+1);
 
     std::string depth_output_dir = "../images/kinect_textures/";
     std::string colour_output_dir = "../images/kinect_textures/";
@@ -84,9 +110,6 @@ int main(int argc, char** argv )
     if (cmd_option_exists(argv, argv+argc, "-co")) {
         colour_output_dir = get_cmd_option(argv,argv+argc,"-co");
     }
-
-
-    num_imgs = std::max(num_imgs, target_frame+1);
 
     uint32_t const img_width  = QHD? 2560 : 1280;
     uint32_t const img_height = QHD? 1440 : 720;
@@ -124,15 +147,19 @@ int main(int argc, char** argv )
 
     // }
 
+    const uint32_t NUM_CAMS = 4;
 
     if (PNGS){
 
 
-        for (uint32_t i = 0; i < num_imgs; ++i)
+        for (uint32_t i = 0; i < num_frames; ++i)
         {
 
-            for (int n = 0; n < 4; ++n){
+            std::cout << "Reading frame " << i << std::endl;
+
+            for (int n = 0; n < NUM_CAMS; ++n){
                 file.read(reinterpret_cast<char*> ( dimg_buffer.data() ), dimg_size_bytes);
+
                 Mat dimage_out (dimg_height, dimg_width, CV_16UC1, convertTo16Bit(dimg_buffer.data(), dimg_width, dimg_height ));
 
                 if ( (TARGET_FRAME_ONLY && i == target_frame) || !TARGET_FRAME_ONLY) {
@@ -154,11 +181,12 @@ int main(int argc, char** argv )
 
                 } 
 
+
             }
 
 
 
-            for (int n = 0; n < 4; ++n){
+            for (int n = 0; n < NUM_CAMS; ++n){
 
                 Mat image_out;
                 
@@ -167,7 +195,7 @@ int main(int argc, char** argv )
                     std::size_t jpeg_size;
                     file.read(reinterpret_cast<char*> ( &jpeg_size ), sizeof(std::size_t));
 
-                    std::cout << "Size of image: " << jpeg_size << std::endl;
+                    // std::cout << "Size of image: " << jpeg_size << std::endl;
 
                     img_buffer.resize(jpeg_size);
                     file.read(reinterpret_cast<char*> ( img_buffer.data() ), jpeg_size);
@@ -196,10 +224,12 @@ int main(int argc, char** argv )
                     }
                 } 
 
+
             }
 
-
+            if(file.peek()==EOF) break;
         }
+
 
     }
 
@@ -222,7 +252,7 @@ int main(int argc, char** argv )
         // compression_params.push_back(IMWRITE_JPEG_LUMA_QUALITY);
         // compression_params.push_back(30);
 
-        for (int i = 0; i < num_imgs; ++i)
+        for (int i = 0; i < num_frames; ++i)
         {
             
 
