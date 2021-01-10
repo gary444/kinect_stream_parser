@@ -53,7 +53,54 @@ bool should_export_image(const uint32_t frame){
 }
 
 
+std::vector<float> get_list_from_args(char** begin, char** end, const std::string& option, const int num_args){
 
+    std::vector<float> rtn_vec (num_args);
+
+    char** it = std::find(begin, end, option);
+    int elements = 0;
+    if (it != end && it+1 != end){
+        while (++it != end && elements < num_args) {
+            rtn_vec[elements++] = atof(*it);
+        }
+    }
+    if (elements < num_args-1){
+        throw std::logic_error("not enough elements found for cmd option: " + option);
+    }
+    return rtn_vec;
+}
+
+uint32_t num_frames = 0;
+uint32_t target_frame = 0;
+uint32_t start_frame = 0;
+uint32_t end_frame = 0;
+bool TARGET_FRAME_ONLY;
+bool OUTPUT_SEQUENCE;
+
+std::string depth_output_dir;
+std::string colour_output_dir;
+
+
+bool should_export_frame(const uint32_t frame_id){
+
+    if (TARGET_FRAME_ONLY && frame_id == target_frame) return true;
+
+    if (OUTPUT_SEQUENCE && frame_id >= start_frame && frame_id < end_frame) return true;
+
+    if (!TARGET_FRAME_ONLY && !OUTPUT_SEQUENCE) return true;
+
+    return false;
+}
+
+std::string getDepthOutBasePath(const uint32_t frame_id) {
+    if (!OUTPUT_SEQUENCE) return depth_output_dir;
+    else return depth_output_dir + "/t" + std::to_string(frame_id) + "/";
+}
+
+std::string getColourOutBasePath(const uint32_t frame_id) {
+    if (!OUTPUT_SEQUENCE) return colour_output_dir;
+    else return colour_output_dir + "/t" + std::to_string(frame_id) + "/";
+}
 
 
 int main(int argc, char** argv )
@@ -77,6 +124,7 @@ int main(int argc, char** argv )
                   << "\t -m: create masked jpegs to test size" << std::endl
                   << "\t -n: number of time steps (=1)" << std::endl
                   << "\t -t: target frame - just export one step" << std::endl
+                  << "\t -seq: [START END) output a sequence of frames from START to END-1" << std::endl
                   ;
         return -1;
     }
@@ -88,20 +136,29 @@ int main(int argc, char** argv )
     const bool        MASKS    = cmd_option_exists(argv, argv+argc, "-m"); 
 
 
-    uint32_t    num_frames = 0;
     if (cmd_option_exists(argv,argv+argc,"-n")){
         num_frames = atoi( get_cmd_option(argv, argv+argc, "-n") ); 
     }
     
-    uint32_t target_frame = 0;
-    const bool TARGET_FRAME_ONLY = cmd_option_exists(argv, argv+argc, "-t"); 
+    TARGET_FRAME_ONLY = cmd_option_exists(argv, argv+argc, "-t"); 
     if (TARGET_FRAME_ONLY){
         target_frame = atoi( get_cmd_option(argv, argv+argc, "-t") ); 
     }
-    num_frames = std::max(num_frames, target_frame+1);
 
-    std::string depth_output_dir = "../images/kinect_textures/";
-    std::string colour_output_dir = "../images/kinect_textures/";
+    OUTPUT_SEQUENCE = cmd_option_exists(argv, argv+argc, "-seq"); 
+
+    if (OUTPUT_SEQUENCE){
+        std::vector<float> args = get_list_from_args(argv, argv+argc, "-seq", 2);
+        start_frame = uint32_t(args[0]); 
+        end_frame = uint32_t(args[1]);
+
+        std::cout << "Will export sequence from " << start_frame << " to " << end_frame << std::endl; 
+    }
+
+    num_frames = std::max(num_frames, std::max(target_frame+1, end_frame));
+
+    depth_output_dir = "../images/kinect_textures/";
+    colour_output_dir = "../images/kinect_textures/";
 
     if (cmd_option_exists(argv, argv+argc, "-do")) {
         depth_output_dir = get_cmd_option(argv,argv+argc,"-do");
@@ -162,13 +219,13 @@ int main(int argc, char** argv )
 
                 Mat dimage_out (dimg_height, dimg_width, CV_16UC1, convertTo16Bit(dimg_buffer.data(), dimg_width, dimg_height ));
 
-                if ( (TARGET_FRAME_ONLY && i == target_frame) || !TARGET_FRAME_ONLY) {
+                if ( should_export_frame(i) ) {
 
                     // write depth images as PNG
                     // imwrite("../images/kinect_textures/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", dimage_out);
 
                     // write depth images as pure floats
-                    const std::string path = depth_output_dir + "/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".depth";
+                    const std::string path = getDepthOutBasePath(i) + "/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".depth";
                     std::ofstream ofile (path, std::ios::binary);
                     ofile.write(reinterpret_cast<char*> (dimg_buffer.data()), sizeof(float) * dimg_width * dimg_height);
                     ofile.close();
@@ -200,7 +257,6 @@ int main(int argc, char** argv )
                     img_buffer.resize(jpeg_size);
                     file.read(reinterpret_cast<char*> ( img_buffer.data() ), jpeg_size);
 
-
                     Mat rawData( 1, jpeg_size, CV_8UC1, img_buffer.data() );
                     image_out  =  imdecode( rawData , cv::IMREAD_UNCHANGED );
                     if ( image_out.data == NULL )   
@@ -218,8 +274,8 @@ int main(int argc, char** argv )
 
                 }
 
-                if ( (TARGET_FRAME_ONLY && i == target_frame) || !TARGET_FRAME_ONLY) {
-                    if (!imwrite(colour_output_dir + "/out_t_" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", image_out)){
+                if ( should_export_frame(i) ) {
+                    if (!imwrite(getColourOutBasePath(i) + "/out_t_" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", image_out)){
                         std::cout << "Couldn't save image" << std::endl;
                     }
                 } 
