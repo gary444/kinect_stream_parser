@@ -125,6 +125,7 @@ int main(int argc, char** argv )
                   << "\t -n: number of time steps (=1)" << std::endl
                   << "\t -t: target frame - just export one step" << std::endl
                   << "\t -seq: [START END) output a sequence of frames from START to END-1" << std::endl
+                  << "\t -k: num cameras (=4)" << std::endl
                   ;
         return -1;
     }
@@ -135,6 +136,7 @@ int main(int argc, char** argv )
     const bool        PNGS     = cmd_option_exists(argv, argv+argc, "-p"); 
     const bool        MASKS    = cmd_option_exists(argv, argv+argc, "-m"); 
 
+    uint32_t NUM_CAMS = 4;
 
     if (cmd_option_exists(argv,argv+argc,"-n")){
         num_frames = atoi( get_cmd_option(argv, argv+argc, "-n") ); 
@@ -166,6 +168,10 @@ int main(int argc, char** argv )
 
     if (cmd_option_exists(argv, argv+argc, "-co")) {
         colour_output_dir = get_cmd_option(argv,argv+argc,"-co");
+    }
+
+    if (cmd_option_exists(argv,argv+argc,"-k")){
+        NUM_CAMS = atoi( get_cmd_option(argv, argv+argc, "-k") ); 
     }
 
     uint32_t const img_width  = QHD? 2560 : 1280;
@@ -204,7 +210,6 @@ int main(int argc, char** argv )
 
     // }
 
-    const uint32_t NUM_CAMS = 4;
 
     if (PNGS){
 
