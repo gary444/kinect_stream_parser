@@ -227,7 +227,7 @@ int main(int argc, char** argv )
                 if ( should_export_frame(i) ) {
 
                     // write depth images as PNG
-                    // imwrite("../images/kinect_textures/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", dimage_out);
+                    imwrite(getDepthOutBasePath(i) + "/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".png", dimage_out);
 
                     // write depth images as pure floats
                     const std::string path = getDepthOutBasePath(i) + "/out_d_t" + std::to_string(i) + "_c"  + std::to_string(n) + ".depth";
